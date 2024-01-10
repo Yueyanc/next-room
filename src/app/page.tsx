@@ -1,44 +1,51 @@
 "use client";
 import Image from "next/image";
-import { useFlicker, useMaterial, usePlayground } from "@/app/hook/useRoom";
+import { useFlicker, usePlayground } from "@/app/hook/useRoom";
 import { useEffect, useRef } from "react";
 import * as Three from "three";
-import { Water } from "three/addons";
+import { GLTF, Water } from "three/addons";
 
 import { Material, Mesh } from "three";
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playground = usePlayground(canvasRef);
-  const { loadBakeTexture } = useMaterial(playground);
   const { createFlicker } = useFlicker();
   useEffect(() => {
-    playground.current.gltfLoader.load(
-      "/model/room3D.glb",
-      (gltf) => {
-        const bakeMaterial = loadBakeTexture(playground.current.textureLoader);
-        gltf.scene.traverse((child: any) => {
-          child.material = bakeMaterial;
-          child.receiveShadow = true;
-          child.castShadow = true;
+    const context = playground.current;
+    context.eventEmitter.once(
+      "loaded:assets",
+      (assets: Record<string, any>) => {
+        // 创建贴图材质
+        const bakeMaterial = new Three.MeshStandardMaterial({
+          map: assets.bakeTexture,
         });
-        playground.current.scene.add(gltf.scene);
+        const mainScreeMaterial = new Three.MeshBasicMaterial({
+          map: assets.mainScreenTexture,
+        });
+        // 设置材质
+        assets.roomModel.scene.traverse((child: any) => {
+          // @ts-ignore
+          child.material = bakeMaterial;
+        });
+        context.scene.add(assets.roomModel.scene);
+        // 电脑屏幕贴图材质
+        const mainSceen = context.scene.getObjectByName("mainSceen") as Mesh;
+        if (mainSceen) {
+          mainSceen.material = mainScreeMaterial;
+        }
+
         // logo旋转动画
-        const vueLog = playground.current.scene.getObjectByName("vueLog");
-        const reactLog = playground.current.scene.getObjectByName("reactLog");
-        const webpackLog =
-          playground.current.scene.getObjectByName("webpackLog");
-        playground.current.updates.push(() => {
+        const vueLog = context.scene.getObjectByName("vueLog");
+        const reactLog = context.scene.getObjectByName("reactLog");
+        const webpackLog = context.scene.getObjectByName("webpackLog");
+        context.updates.push(() => {
           vueLog && vueLog.rotateY(0.005);
           reactLog && reactLog.rotateZ(0.005);
           webpackLog && webpackLog.rotateZ(0.005);
         });
         // node灯牌闪烁动画
-        const nodeButton = playground.current.scene.getObjectByName(
-          "node_button"
-        ) as Mesh;
-        const nodeO = playground.current.scene.getObjectByName(
-          "node_o"
-        ) as Mesh;
+        const nodeButton = context.scene.getObjectByName("node_button") as Mesh;
+        const nodeO = context.scene.getObjectByName("node_o") as Mesh;
         const { light: nodeButtonLight } = createFlicker({
           mesh: nodeButton,
           color: 0x08a85e,
@@ -47,11 +54,7 @@ export default function Home() {
           mesh: nodeO,
           color: 0x08a85e,
         });
-        playground.current.scene.add(nodeButtonLight, nodeOLight);
-      },
-      (progress) => {},
-      (error) => {
-        console.log(error);
+        context.scene.add(nodeButtonLight, nodeOLight);
       }
     );
   }, []);

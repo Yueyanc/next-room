@@ -8,56 +8,64 @@ import {
   DRACOLoader,
   RGBELoader,
 } from "three/addons";
-class Timer {
-  start;
-  current;
-  elapsed;
-  delta;
-  playing;
-  ticker = 0;
-  constructor() {
-    this.start = Date.now();
-    this.current = this.start;
-    this.elapsed = 0;
-    this.delta = 16;
-    this.playing = true;
-    this.tick = this.tick.bind(this);
-    this.tick(0);
-  }
-  tick(timestamp: any) {
-    this.ticker = window.requestAnimationFrame(this.tick);
-    this.elapsed = timestamp - this.start;
-  }
-}
+import EventEmitter from "events";
 class ThreePlayground {
-  updates!: Array<() => any>;
+  updates: Array<() => any> = [];
   scene!: Three.Scene;
   renderer!: Three.WebGLRenderer;
   camera!: Three.PerspectiveCamera;
   gltfLoader!: GLTFLoader;
-  rgbeLoader!: RGBELoader;
-  imageLoader!: Three.ImageLoader;
-  textureLoader!: Three.TextureLoader;
+  rgbeLoader = new RGBELoader();
+  imageLoader = new Three.ImageLoader();
+  textureLoader = new Three.TextureLoader();
   canvas!: HTMLCanvasElement;
-  timer!: Timer;
+  eventEmitter = new EventEmitter();
+  assets: Record<string, any> = {};
+  orbitControls!: OrbitControls;
   init({ canvas }: { canvas: HTMLCanvasElement }) {
     this.canvas = canvas;
-    this.timer = new Timer();
+    this.initScene();
+    this.initRenderer();
+    this.initCamera();
+    this.initOrbitControls();
+    // this.initDirectionalLight();
+    this.initAmbientLight();
+    this.initGLTFLoader();
+    // this.initFloor();
+    this.onResize();
+    this.update();
+    this.loadAssets();
+  }
+  loadAssets() {
+    // 加载烘焙贴图
+    const bakeTexture = this.textureLoader.load("/model/bake-night.jpg");
+    bakeTexture.flipY = false;
+    bakeTexture.colorSpace = Three.SRGBColorSpace;
+    bakeTexture.magFilter = Three.LinearFilter;
+    bakeTexture.minFilter = Three.LinearMipmapLinearFilter;
+    this.assets.bakeTexture = bakeTexture;
+    // 加载屏幕贴图
+    const mainScreenTexture = this.textureLoader.load("/model/main_screen.png");
+    mainScreenTexture.flipY = false;
+    mainScreenTexture.colorSpace = Three.SRGBColorSpace;
+    this.assets.mainScreenTexture = mainScreenTexture;
+    Promise.all([
+      // 加载房间模型
+      new Promise((resolve) => {
+        this.gltfLoader.load("/model/room3D.glb", (gltf) => {
+          this.assets.roomModel = gltf;
+          this.eventEmitter.emit("loaded:roomModel", gltf);
+          resolve(true);
+        });
+      }),
+    ]).then((res) => {
+      this.eventEmitter.emit("loaded:assets", this.assets);
+    });
+  }
+  initScene() {
     this.scene = new Three.Scene();
     this.scene.fog = new Three.Fog(0xffffff, 5, 10000);
     this.scene.background = new Three.Color(0x333333);
-    this.initRenderer({ canvas });
-    this.initCamera({ canvas });
-    this.initOrbitControls();
-    this.initAmbientLight();
-    this.initGLTFLoader();
-    this.initRGBELoader();
-    // this.initFloor();
-    this.onResize();
-    this.imageLoader = new Three.ImageLoader();
-    this.textureLoader = new Three.TextureLoader();
-    this.update();
-    this.updates = [];
   }
 
   onResize() {
@@ -99,10 +107,6 @@ class ThreePlayground {
     });
   }
 
-  initRGBELoader() {
-    this.rgbeLoader = new RGBELoader();
-  }
-
   initGLTFLoader() {
     const gltfLoader = new GLTFLoader();
     const dracoLoader = new DRACOLoader();
@@ -114,11 +118,24 @@ class ThreePlayground {
 
   initOrbitControls() {
     const controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.camera.position.set(8, 8, 8);
-    controls.update();
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.015;
+    controls.maxAzimuthAngle = Math.PI / 2;
+    controls.minAzimuthAngle = 0;
+    controls.maxPolarAngle = (3 * Math.PI) / 8;
+    controls.maxPolarAngle = Math.PI / 2;
+    controls.maxDistance = 15;
+    controls.minDistance = 5;
+    controls.zoomSpeed = 0.5;
+    controls.panSpeed = 0.5;
+    controls.rotateSpeed = 0.4;
+    // 设置相机朝向
+    controls.target = new Three.Vector3(0, 2, 0);
+    this.updates.push(() => controls.update());
+    this.orbitControls = controls;
   }
 
-  initRenderer({ canvas }: { canvas: HTMLCanvasElement }) {
+  initRenderer() {
     this.renderer = new Three.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
@@ -127,14 +144,16 @@ class ThreePlayground {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.outputColorSpace = Three.SRGBColorSpace;
-    this.renderer.setSize(canvas.width, canvas.height);
+    this.renderer.setSize(this.canvas.width, this.canvas.height);
   }
 
-  initCamera(option: { canvas: HTMLCanvasElement }) {
+  initCamera() {
     this.camera = new Three.PerspectiveCamera(45, 2, 0.1, 1000);
     this.camera.aspect = this.canvas.width / this.canvas.height;
+    this.camera.position.set(7, 7, 7);
+    this.camera.lookAt(new Three.Vector3(0, 0, 0));
     this.camera.updateProjectionMatrix();
-    this.camera.position.set(0, 0, 0);
+
     this.scene.add(this.camera);
   }
 
@@ -158,23 +177,6 @@ class ThreePlayground {
     }
   }
 }
-export const useMaterial = (playground: MutableRefObject<ThreePlayground>) => {
-  function loadBakeTexture(textureLoader: Three.TextureLoader) {
-    const bakeTexture = textureLoader.load("/model/bake-night.jpg");
-    bakeTexture.flipY = false;
-    bakeTexture.colorSpace = Three.SRGBColorSpace;
-    bakeTexture.magFilter = Three.NearestFilter;
-    bakeTexture.minFilter = Three.NearestFilter;
-
-    const bakeMaterial = new Three.MeshStandardMaterial({
-      map: bakeTexture,
-    });
-    return bakeMaterial;
-  }
-  return {
-    loadBakeTexture,
-  };
-};
 export const useFlicker = () => {
   function createFlicker({ mesh, color }: { mesh: Three.Mesh; color: number }) {
     const material = new Three.MeshStandardMaterial({

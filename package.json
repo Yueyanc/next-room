@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "events": "^3.3.0",
     "gsap": "^3.12.4",
     "next": "14.0.4",
     "react": "^18",
