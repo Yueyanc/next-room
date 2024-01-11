@@ -3,9 +3,9 @@ import Image from "next/image";
 import { useFlicker, usePlayground } from "@/app/hook/useRoom";
 import { useEffect, useRef } from "react";
 import * as Three from "three";
-import { GLTF, Water } from "three/addons";
 
 import { Material, Mesh } from "three";
+import gsap from "gsap";
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playground = usePlayground(canvasRef);
@@ -26,6 +26,19 @@ export default function Home() {
         assets.roomModel.scene.traverse((child: any) => {
           // @ts-ignore
           child.material = bakeMaterial;
+          context.interactionManager.add(child);
+          child.addEventListener("click", () => {});
+        });
+        assets.roomModel.scene.scale.set(0, 0, 0);
+        gsap.to(assets.roomModel.scene.scale, {
+          x: 1,
+          y: 1,
+          z: 1,
+          duration: 2,
+        });
+        gsap.to(assets.roomModel.scene.rotation, {
+          y: 2 * Math.PI,
+          duration: 2,
         });
         context.scene.add(assets.roomModel.scene);
         // 电脑屏幕贴图材质

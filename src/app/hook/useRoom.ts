@@ -2,6 +2,7 @@ import type { MutableRefObject, Ref, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import * as Three from "three";
 import { gsap } from "gsap";
+import { InteractionManager } from "three.interactive";
 import {
   OrbitControls,
   GLTFLoader,
@@ -22,6 +23,7 @@ class ThreePlayground {
   eventEmitter = new EventEmitter();
   assets: Record<string, any> = {};
   orbitControls!: OrbitControls;
+  interactionManager!: InteractionManager;
   init({ canvas }: { canvas: HTMLCanvasElement }) {
     this.canvas = canvas;
     this.initScene();
@@ -31,10 +33,19 @@ class ThreePlayground {
     // this.initDirectionalLight();
     this.initAmbientLight();
     this.initGLTFLoader();
+    this.initInteractive();
     // this.initFloor();
     this.onResize();
     this.update();
     this.loadAssets();
+  }
+  initInteractive() {
+    this.interactionManager = new InteractionManager(
+      this.renderer,
+      this.camera,
+      this.renderer.domElement
+    );
+    this.updates.push(this.interactionManager.update);
   }
   loadAssets() {
     // 加载烘焙贴图
